@@ -1,10 +1,15 @@
+import os.path
+
 from django.shortcuts import render
 from django import forms
 from django.http import HttpResponse
 from pptx import Presentation
 from django.core.files import File
 from ppt.models import PptModel
+from spire.presentation import Presentation as pv
 import pyttsx3
+from moviepy.editor import concatenate, ImageClip
+import moviepy.editor as mpe
 
 
 class PptModelForm(forms.ModelForm):
@@ -26,7 +31,8 @@ def index(request):
                 if slide.notes_slide:
                     comments = slide.notes_slide.notes_text_frame.text
                     print(comments)
-                    c+=comments
+                    c += comments
+                    print(dir(slide))
                     if comments:
                         rate = 150
                         text_speech.setProperty('voice', 'HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Speech\Voices\Tokens\TTS_MS_EN-\
@@ -35,6 +41,20 @@ def index(request):
             print(c)
             text_speech.save_to_file(c, 'media/abc.Mp3')
             text_speech.runAndWait()
-
-            return render(request, 'index.html',context={'audio':'abc.mp3'})
+            presentation = pv()
+            presentation.LoadFromFile("media\\" + str(obj.pptFile))
+            fileNames = []
+            for i, slide in enumerate(presentation.Slides):
+                fileNames.append("ToImage_" + str(i) + ".png")
+                img = slide.SaveAsImage()
+                img.Save(fileNames[-1])
+                img.Dispose()
+            presentation.Dispose()
+            print([os.path.join(os.path.relpath('.'), i) for i in fileNames])
+            video = concatenate([ImageClip(os.path.join(os.path.relpath('.'), i)).set_duration(1) for i in fileNames],
+                                method="compose")
+            audio_background = mpe.AudioFileClip('media/abc.Mp3')
+            final_clip = video.set_audio(audio_background)
+            final_clip.write_videofile("media/output.mp4", fps=24)
+            return render(request, 'index.html', context={'audio': 'output.mp4'})
     return render(request, 'index.html')
